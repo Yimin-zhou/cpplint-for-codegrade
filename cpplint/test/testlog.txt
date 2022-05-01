@@ -1,1 +1,0 @@
-test.cpp:2:  Do not use namespace using-directives.  Use using-declarations instead.  [build/namespaces] [5]

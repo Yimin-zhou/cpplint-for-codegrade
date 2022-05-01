@@ -1491,7 +1491,8 @@ def _RestoreFilters():
 class _FunctionState(object):
   """Tracks current function name and the number of lines in its body."""
 
-  _NORMAL_TRIGGER = 250  # for --v=0, 500 for --v=1, etc.
+  # max function length
+  _NORMAL_TRIGGER = 10  # for --v=0, 500 for --v=1, etc.
   _TEST_TRIGGER = 400    # about 50% more than _NORMAL_TRIGGER.
 
   def __init__(self):
@@ -4809,6 +4810,41 @@ def GetLineWidth(line):
   else:
     return len(line)
 
+_CUSTOM_STYLE_TEMPLATES = []
+# my custom fuctions
+def CheckCustomStyle(filename, clean_lines, linenum, error):
+    """Check for custom style which users defined.
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
+    line = clean_lines.elided[linenum]
+    for custom_style in _CUSTOM_STYLE_TEMPLATES:
+        if Search(r'%s'%custom_style, line):
+            error(filename, linenum, 'readability/braces', 5,
+                'this line can not follow the custom style: %s'%custom_style)
+
+def MyCheckCommaSpacing(filename, clean_lines, linenum, error):
+  """Checks for horizontal spacing near semicolons.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  # You should always have a space after a semicolon
+  # except for few corner cases
+  # TODO(unknown): clarify if 'if (1) { return 1;}' is requires one more
+  # space after ;
+  if Search(r';[^\s};\\)/]', line):
+    error(filename, linenum, 'myrules/semicolon', 3,
+          '(This is a custom message) Missing space after ;')
+
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
                error):
@@ -4934,6 +4970,10 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
   classinfo = nesting_state.InnermostClass()
   if classinfo:
     CheckSectionSpacing(filename, clean_lines, classinfo, linenum, error)
+
+#custom fuctions:
+  CheckCustomStyle(filename, clean_lines, linenum, error)
+  MyCheckCommaSpacing(filename, clean_lines, linenum, error)
 
 
 _RE_PATTERN_INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]*)[>"].*$')
@@ -6276,9 +6316,6 @@ def CheckRedundantOverrideOrFinal(filename, clean_lines, linenum, error):
           ('"override" is redundant since function is '
            'already declared as "final"'))
 
-
-
-
 # Returns true if we are at a new block, and it is directly
 # inside of a namespace.
 def IsBlockInNameSpace(nesting_state, is_forward_declaration):
@@ -6720,7 +6757,6 @@ def PrintCategories():
   sys.stderr.write(''.join('  %s\n' % cat for cat in _ERROR_CATEGORIES))
   sys.exit(0)
 
-
 def ParseArguments(args):
   """Parses the command line arguments.
 
@@ -6746,7 +6782,8 @@ def ParseArguments(args):
                                                  'recursive',
                                                  'headers=',
                                                  'includeorder=',
-                                                 'quiet'])
+                                                 'quiet',
+                                                 'customstyle='])
   except getopt.GetoptError:
     PrintUsage('Invalid arguments.')
 
@@ -6804,6 +6841,12 @@ def ParseArguments(args):
       recursive = True
     elif opt == '--includeorder':
       ProcessIncludeOrderOption(val)
+    
+    #custom commands
+    elif opt == '--customstyle':
+      input_style = val.replace('!!', ' ')
+      global _CUSTOM_STYLE_TEMPLATES
+      _CUSTOM_STYLE_TEMPLATES.append(input_style)
 
   if not filenames:
     PrintUsage('No files were specified.')
