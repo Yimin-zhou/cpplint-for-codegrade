@@ -4826,8 +4826,8 @@ def CheckCustomStyle(filename, clean_lines, linenum, error):
             error(filename, linenum, 'readability/braces', 5,
                 'this line can not follow the custom style: %s'%custom_style)
 
-def MyCheckCommaSpacing(filename, clean_lines, linenum, error):
-  """Checks for horizontal spacing near semicolons.
+def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
+  """Checks for variable and function names.
 
   Args:
     filename: The name of the current file.
@@ -4837,13 +4837,39 @@ def MyCheckCommaSpacing(filename, clean_lines, linenum, error):
   """
   line = clean_lines.elided[linenum]
 
-  # You should always have a space after a semicolon
-  # except for few corner cases
-  # TODO(unknown): clarify if 'if (1) { return 1;}' is requires one more
-  # space after ;
-  if Search(r';[^\s};\\)/]', line):
-    error(filename, linenum, 'myrules/semicolon', 3,
-          '(This is a custom message) Missing space after ;')
+  if Search(r'(^(\s*?)(?!return)((_*)[a-z]+(_*)[a-z]+(_*))(\s*)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
+    error(filename, linenum, 'myrules/name', 3,
+          '(Variable/Function) Names of variables and functions should start with a lowercase letter')
+
+def MyCheckClassNaming(filename, clean_lines, linenum, error):
+  """Checks for Class names.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  if Search(r'(^(\s*?)(class)(\s*)([a-z]|[0-9]))', line):
+    error(filename, linenum, 'myrules/name', 3,
+          '(Class) Name of a Class should starts with a uppercase letter')
+
+def MyCheckConstNaming(filename, clean_lines, linenum, error):
+  """Checks for const names.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  if Search(r'(^(\s*?)(const)(\s*)((_*)[a-z_*]+(_*)[a-z]+(_*))(\s*)(([A-Z]*[a-z]+[A-z]*(_[A-Z]*[a-z]+[A-z]*)*)|([A-Z]+(_[A-Z]*)*[a-z]+(.*?)))(\s*)(=|;))', line):
+    error(filename, linenum, 'myrules/name', 3,
+          '(const) Name of a const should not contain lowercase letters')
 
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
@@ -4971,9 +4997,11 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
   if classinfo:
     CheckSectionSpacing(filename, clean_lines, classinfo, linenum, error)
 
-#custom fuctions:
+  #custom fuctions:
   CheckCustomStyle(filename, clean_lines, linenum, error)
-  MyCheckCommaSpacing(filename, clean_lines, linenum, error)
+  MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error)
+  MyCheckClassNaming(filename, clean_lines, linenum, error)
+  MyCheckConstNaming(filename, clean_lines, linenum, error)
 
 
 _RE_PATTERN_INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]*)[>"].*$')

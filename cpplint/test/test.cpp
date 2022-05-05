@@ -2,23 +2,31 @@
 #include <vector>
 using namespace std;
 
-int main() {
-  int n;
+class myClass {     
+  public:           
+    int myNum;      
+    string myString;
+};
 
-  cout << "Enter an integer: ";cin >> n;
+int Main() {
+  int goodName;
+  wchar_t Name;
+
+  cout << "Enter an integer: ";
+  cin >> goodName;
 
   const int xzxc = 1;
   cout << xzxc;
 
-  if (n % 2 == 0) {
-    cout << n << " is even.";
-    if (n % 2 == 0) {
-      cout << n << " is even.";
+  if (goodName % 2 == 0) {
+    cout << goodName << " is even.";
+    if (goodName % 2 == 0) {
+      cout << goodName << " is even.";
     } else {
-      cout << n << " is odd.";
+      cout << goodName << " is odd.";
     }
   } else {
-    cout << n << " is odd.";
+    cout << goodName << " is odd.";
   }
 
   return 0;
