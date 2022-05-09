@@ -10,7 +10,7 @@ class myClass {
 
 int Main() {
   int goodName;
-  wchar_t Name;
+  wchar_t name;
 
   cout << "Enter an integer: ";
   cin >> goodName;

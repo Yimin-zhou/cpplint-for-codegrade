@@ -1488,6 +1488,20 @@ def _RestoreFilters():
   """ Restores filters previously backed up."""
   _cpplint_state.RestoreFilters()
 
+# custom class used to store variable infomation
+class _MyVariableState(object):
+  def __init__(self):
+    self.variable_name = ''
+    self.declaration_line = 0
+    self.Usage_line = 0
+
+  def Declaration(self,name,line_num):
+    self.variable_name = name
+    self.line_number = line_num
+  
+  def Usage(self,line_num):
+    self.Usage_line = line_num
+
 class _FunctionState(object):
   """Tracks current function name and the number of lines in its body."""
 
@@ -4827,7 +4841,7 @@ def CheckCustomStyle(filename, clean_lines, linenum, error):
                 'this line can not follow the custom style: %s'%custom_style)
 
 def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
-  """Checks for variable and function names.
+  """Check variable and function names.
 
   Args:
     filename: The name of the current file.
@@ -4842,7 +4856,7 @@ def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
           '(Variable/Function) Names of variables and functions should start with a lowercase letter')
 
 def MyCheckClassNaming(filename, clean_lines, linenum, error):
-  """Checks for Class names.
+  """Check Class names.
 
   Args:
     filename: The name of the current file.
@@ -4857,7 +4871,7 @@ def MyCheckClassNaming(filename, clean_lines, linenum, error):
           '(Class) Name of a Class should starts with a uppercase letter')
 
 def MyCheckConstNaming(filename, clean_lines, linenum, error):
-  """Checks for const names.
+  """Check const names.
 
   Args:
     filename: The name of the current file.
@@ -4870,6 +4884,26 @@ def MyCheckConstNaming(filename, clean_lines, linenum, error):
   if Search(r'(^(\s*?)(const)(\s*)((_*)[a-z_*]+(_*)[a-z]+(_*))(\s*)(([A-Z]*[a-z]+[A-z]*(_[A-Z]*[a-z]+[A-z]*)*)|([A-Z]+(_[A-Z]*)*[a-z]+(.*?)))(\s*)(=|;))', line):
     error(filename, linenum, 'myrules/name', 3,
           '(const) Name of a const should not contain lowercase letters')
+
+def MyCheckGlobalVariable(filename, clean_lines, linenum, error,variable_state):
+  """Check usage of global variables.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+    variable_state: info about a variable
+  """
+  line = clean_lines.elided[linenum]
+  match = Match(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s)(\w+)(\s|=|;)(.*)(;*))',line)
+  if match :
+    print(match.group(9))
+    variable_state.Declaration(linenum,match.group(7))
+    error(filename, linenum, 'myrules/GlobalVariable', 3,
+          '(GlobalVariable) Stored a variable')
+  
+  # todo check if it's in a block
 
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
@@ -6407,7 +6441,7 @@ def CheckItemIndentationInNamespace(filename, raw_lines_no_comments, linenum,
 
 
 def ProcessLine(filename, file_extension, clean_lines, line,
-                include_state, function_state, nesting_state, error,
+                include_state, function_state, nesting_state, variable_state,error,
                 extra_check_functions=None):
   """Processes a single line in the file.
 
@@ -6421,6 +6455,7 @@ def ProcessLine(filename, file_extension, clean_lines, line,
     function_state: A _FunctionState instance which counts function lines, etc.
     nesting_state: A NestingState instance which maintains information about
                    the current stack of nested blocks being parsed.
+    variable_state: A variable_state.
     error: A callable to which errors are reported, which takes 4 arguments:
            filename, line number, error level, and message
     extra_check_functions: An array of additional check functions that will be
@@ -6450,6 +6485,9 @@ def ProcessLine(filename, file_extension, clean_lines, line,
   if extra_check_functions:
     for check_fn in extra_check_functions:
       check_fn(filename, clean_lines, line, error)
+  
+  #custom functions
+  MyCheckGlobalVariable(filename, clean_lines, line, error, variable_state)
 
 def FlagCxx11Features(filename, clean_lines, linenum, error):
   """Flag those c++11 features that we only allow in certain places.
@@ -6543,6 +6581,7 @@ def ProcessFileData(filename, file_extension, lines, error,
   include_state = _IncludeState()
   function_state = _FunctionState()
   nesting_state = NestingState()
+  variable_state = _MyVariableState()
 
   ResetNolintSuppressions()
 
@@ -6556,7 +6595,7 @@ def ProcessFileData(filename, file_extension, lines, error,
 
   for line in xrange(clean_lines.NumLines()):
     ProcessLine(filename, file_extension, clean_lines, line,
-                include_state, function_state, nesting_state, error,
+                include_state, function_state, nesting_state, variable_state,error,
                 extra_check_functions)
     FlagCxx11Features(filename, clean_lines, line, error)
   nesting_state.CheckCompletedBlocks(filename, error)
