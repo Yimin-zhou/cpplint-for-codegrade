@@ -3,17 +3,28 @@
 using namespace std;
 
 int main() {
-  int goodName;
-  wchar_t name;
+  int goodName = 1;
+  float BoodName = 2;
+  bool name= false;
+  float x;
+  int foo[5]; 
+  
+  x = 1;
 
-  if (goodName % 2 == 0) {
+  if (goodName % 2 == 0) 
+  {
     cout << goodName << " is even.";
-    if (goodName % 2 == 0) {
+    if (goodName % 2 == 0) 
+    {
       cout << goodName << " is even.";
-    } else {
+    } 
+    else 
+    {
       cout << goodName << " is odd.";
     }
-  } else {
+  } 
+  else 
+  {
     cout << goodName << " is odd.";
   }
 

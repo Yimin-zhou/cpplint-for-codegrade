@@ -60,6 +60,7 @@ import sys
 import sysconfig
 import unicodedata
 import xml.etree.ElementTree
+from xmlrpc.client import TRANSPORT_ERROR
 
 # if empty, use defaults
 _valid_extensions = set([])
@@ -1494,6 +1495,8 @@ class _MyVariableState(object):
     self.variable_name = ''
     self.declaration_line = 0
     self.usage_line = []
+    self.assigned = False
+    self.assigned_warned = False
   
   def GetName(self):
     return self.variable_name
@@ -1511,6 +1514,12 @@ class _MyVariableState(object):
   def Usage(self,line_num):
     if line_num != self.declaration_line:
       self.usage_line.append(line_num)
+  
+  def SetAssigned(self,boolean):
+    self.assigned = boolean
+
+  def SetAssignedWarn(self,boolean):
+    self.assigned_warned = boolean
 
 class _FunctionState(object):
   """Tracks current function name and the number of lines in its body."""
@@ -4277,22 +4286,29 @@ def CheckBraces(filename, clean_lines, linenum, error):
 
   line = clean_lines.elided[linenum]        # get rid of comments and strings
 
-  if Match(r'\s*{\s*$', line):
-    # We allow an open brace to start a line in the case where someone is using
-    # braces in a block to explicitly create a new scope, which is commonly used
-    # to control the lifetime of stack-allocated variables.  Braces are also
-    # used for brace initializers inside function calls.  We don't detect this
-    # perfectly: we just don't complain if the last non-whitespace character on
-    # the previous non-blank line is ',', ';', ':', '(', '{', or '}', or if the
-    # previous line starts a preprocessor block. We also allow a brace on the
-    # following line if it is part of an array initialization and would not fit
-    # within the 80 character limit of the preceding line.
-    prevline = GetPreviousNonBlankLine(clean_lines, linenum)[0]
-    if (not Search(r'[,;:}{(]\s*$', prevline) and
-        not Match(r'\s*#', prevline) and
-        not (GetLineWidth(prevline) > _line_length - 2 and '[]' in prevline)):
+  # if Match(r'\s*{\s*$', line):
+  #   # We allow an open brace to start a line in the case where someone is using
+  #   # braces in a block to explicitly create a new scope, which is commonly used
+  #   # to control the lifetime of stack-allocated variables.  Braces are also
+  #   # used for brace initializers inside function calls.  We don't detect this
+  #   # perfectly: we just don't complain if the last non-whitespace character on
+  #   # the previous non-blank line is ',', ';', ':', '(', '{', or '}', or if the
+  #   # previous line starts a preprocessor block. We also allow a brace on the
+  #   # following line if it is part of an array initialization and would not fit
+  #   # within the 80 character limit of the preceding line.
+  #   prevline = GetPreviousNonBlankLine(clean_lines, linenum)[0]
+  #   if (not Search(r'[,;:}{(]\s*$', prevline) and
+  #       not Match(r'\s*#', prevline) and
+  #       not (GetLineWidth(prevline) > _line_length - 2 and '[]' in prevline)):
+  #     error(filename, linenum, 'whitespace/braces', 4,
+  #           '{ should almost always be at the end of the previous line')
+    
+  if Search(r'.*{\s*$', line):
+    matches = Match(r'(.*?){\s*$', line)
+    if Search(r'[a-zA-Z]', matches.group(1)):
       error(filename, linenum, 'whitespace/braces', 4,
-            '{ should almost always be at the end of the previous line')
+        '{ should always be on its own line')
+
 
   # An else clause should be on the same line as the preceding closing brace.
   if Match(r'\s*else\b\s*(?:if\b|\{|$)', line):
@@ -4866,7 +4882,7 @@ def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
   """
   line = clean_lines.elided[linenum]
 
-  if Search(r'(^(\s*?)(?!return)((_*)[a-z]+(_*)[a-z]+(_*))(\s*)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
+  if Search(r'(^(\s*?)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
     error(filename, linenum, 'myrules/name', 3,
           '(Variable/Function) Names of variables and functions should start with a lowercase letter')
 
@@ -4898,10 +4914,25 @@ def MyCheckConstNaming(filename, clean_lines, linenum, error):
 
   if Search(r'(^(\s*?)(const)(\s*)((_*)[a-z_*]+(_*)[a-z]+(_*))(\s*)(([A-Z]*[a-z]+[A-z]*(_[A-Z]*[a-z]+[A-z]*)*)|([A-Z]+(_[A-Z]*)*[a-z]+(.*?)))(\s*)(=|;))', line):
     error(filename, linenum, 'myrules/name', 3,
-          '(const) Name of a const should not contain lowercase letters')
+          '(Const) Name of a const should not contain lowercase letters')
+
+def MyCheckInitialization (filename, clean_lines, linenum, error):
+  """Check variable Initialization.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(;$))', line):
+    error(filename, linenum, 'myrules/initialization', 3,
+          '(Variable) variables should always be initialized')
 
 def MyStoreVariable(filename, clean_lines, linenum, error,variable_stack):
-  """Check usage of global variables.
+  """Store variables.
 
   Args:
     filename: The name of the current file.
@@ -4912,18 +4943,17 @@ def MyStoreVariable(filename, clean_lines, linenum, error,variable_stack):
   """
   line = clean_lines.elided[linenum]
   match = Match(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s)(\w+)(\s|=|;)(?!{)(.*))',line)
+  # if it's a variable
   if match :
-    print(match.group(9))
     variable_state = _MyVariableState()
     variable_state.Declaration(match.group(9),linenum)
+    # push variable object to the stack
     variable_stack.append(variable_state)
-    
     # error(filename, linenum, 'myrules/GlobalVariable', 3,
     #       '(GlobalVariable) Stored a variable')
-  
-  # todo check if it's in a block
-def MyCheckUsageOfVariable(filename, clean_lines, linenum, error,variable_stack,nesting_state):
-  """Check where the variable been used.
+
+def MyStoreUsageOfVariable(filename, clean_lines, linenum, error,variable_stack,nesting_state):
+  """Store where the variable been used.
 
   Args:
     filename: The name of the current file.
@@ -4935,20 +4965,53 @@ def MyCheckUsageOfVariable(filename, clean_lines, linenum, error,variable_stack,
   line = clean_lines.elided[linenum]
 
   for var_state in variable_stack:
-    variableName = var_state.GetName()
-    if variableName != '':
-      match = Match(rf"(.*){variableName}",line)
+    variable_name = var_state.GetName()
+    if variable_name != '':
+      match = Match(rf"(.*){variable_name}",line)
       if match :
-        print("Matched!! ",match.group(0))
         var_state.Usage(linenum)
-        error(filename, linenum, 'myrules/Variable', 3,
-              '(Variable) Find a usage')
-        print(variableName,var_state.GetUsageLine(),var_state.GetDeclaredLine())
-        print("blocks ",nesting_state.stack)
-        if nesting_state.stack:
-          print("first block starting line ",nesting_state.stack[0].starting_linenum)
-          print("first block ending line ",nesting_state.stack[0].ending_linenum)
 
+        assigned_match = Match(rf"(.*){variable_name}(\s*)(=)",line)
+        # if it's been assigned again
+        if assigned_match:
+          if linenum != var_state.declaration_line:
+            print(variable_name,' get assigned again')
+            var_state.SetAssigned(True)
+
+def MyCheckVarAssignment (filename, clean_lines, linenum, error,variable_stack):
+  """ Should be declared const if they are assigned only once (by design).
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+    variable_stack: info about variables
+  """
+
+  for var_state in variable_stack:
+    # only check if it's been assigned more than once at the end of the file
+    if linenum == clean_lines.NumLines()-2:
+      if var_state.assigned == False:
+        if var_state.assigned_warned == False:
+          error(filename, var_state.declaration_line, 'myrules/Variable', 3,
+            '(Variable) This variable should be declared as Const')
+        var_state.SetAssignedWarn(True)
+
+def MyCheckArray(filename, clean_lines, linenum, error):
+  """Arrays must not be used.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(\[.*?\]))', line):
+    error(filename, linenum, 'myrules/array', 3,
+          '(Array) Arrays must not be used')
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
                error):
@@ -5080,6 +5143,8 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
   MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error)
   MyCheckClassNaming(filename, clean_lines, linenum, error)
   MyCheckConstNaming(filename, clean_lines, linenum, error)
+  MyCheckInitialization(filename, clean_lines, linenum, error)
+  MyCheckArray(filename, clean_lines, linenum, error)
 
 
 _RE_PATTERN_INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]*)[>"].*$')
@@ -6532,7 +6597,8 @@ def ProcessLine(filename, file_extension, clean_lines, line,
   
   #custom functions
   MyStoreVariable(filename, clean_lines, line, error,variable_stack)
-  MyCheckUsageOfVariable(filename, clean_lines, line, error, variable_stack,nesting_state)
+  MyCheckVarAssignment(filename, clean_lines, line, error,variable_stack)
+  MyStoreUsageOfVariable(filename, clean_lines, line, error, variable_stack,nesting_state)
 
 def FlagCxx11Features(filename, clean_lines, linenum, error):
   """Flag those c++11 features that we only allow in certain places.
@@ -6626,7 +6692,6 @@ def ProcessFileData(filename, file_extension, lines, error,
   include_state = _IncludeState()
   function_state = _FunctionState()
   nesting_state = NestingState()
-  # variable_state = _MyVariableState()
   variable_stack = []
 
   ResetNolintSuppressions()
