@@ -1493,14 +1493,24 @@ class _MyVariableState(object):
   def __init__(self):
     self.variable_name = ''
     self.declaration_line = 0
-    self.Usage_line = 0
+    self.usage_line = []
+  
+  def GetName(self):
+    return self.variable_name
+  
+  def GetDeclaredLine(self):
+    return self.declaration_line
+
+  def GetUsageLine(self):
+    return self.usage_line
 
   def Declaration(self,name,line_num):
     self.variable_name = name
-    self.line_number = line_num
+    self.declaration_line = line_num
   
   def Usage(self,line_num):
-    self.Usage_line = line_num
+    if line_num != self.declaration_line:
+      self.usage_line.append(line_num)
 
 class _FunctionState(object):
   """Tracks current function name and the number of lines in its body."""
@@ -2719,6 +2729,7 @@ class _BlockInfo(object):
 
   def __init__(self, linenum, seen_open_brace):
     self.starting_linenum = linenum
+    self.ending_linenum = 0
     self.seen_open_brace = seen_open_brace
     self.open_parentheses = 0
     self.inline_asm = _NO_ASM
@@ -2751,6 +2762,9 @@ class _BlockInfo(object):
       error: The function to call with any errors found.
     """
     pass
+
+  def SetEndLien(self,linenum):
+    self.ending_linenum = linenum
 
   def IsBlockInfo(self):
     """Returns true if this block is a _BlockInfo.
@@ -3252,6 +3266,7 @@ class NestingState(object):
         # Perform end of block checks and pop the stack.
         if self.stack:
           self.stack[-1].CheckEnd(filename, clean_lines, linenum, error)
+          self.stack[0].SetEndLien(linenum)
           self.stack.pop()
       line = matched.group(2)
 
@@ -4885,7 +4900,7 @@ def MyCheckConstNaming(filename, clean_lines, linenum, error):
     error(filename, linenum, 'myrules/name', 3,
           '(const) Name of a const should not contain lowercase letters')
 
-def MyCheckGlobalVariable(filename, clean_lines, linenum, error,variable_state):
+def MyStoreVariable(filename, clean_lines, linenum, error,variable_stack):
   """Check usage of global variables.
 
   Args:
@@ -4893,17 +4908,46 @@ def MyCheckGlobalVariable(filename, clean_lines, linenum, error,variable_state):
     clean_lines: A CleansedLines instance containing the file.
     linenum: The number of the line to check.
     error: The function to call with any errors found.
-    variable_state: info about a variable
+    variable_stack: info about variables
   """
   line = clean_lines.elided[linenum]
-  match = Match(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s)(\w+)(\s|=|;)(.*)(;*))',line)
+  match = Match(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s)(\w+)(\s|=|;)(?!{)(.*))',line)
   if match :
     print(match.group(9))
-    variable_state.Declaration(linenum,match.group(7))
-    error(filename, linenum, 'myrules/GlobalVariable', 3,
-          '(GlobalVariable) Stored a variable')
+    variable_state = _MyVariableState()
+    variable_state.Declaration(match.group(9),linenum)
+    variable_stack.append(variable_state)
+    
+    # error(filename, linenum, 'myrules/GlobalVariable', 3,
+    #       '(GlobalVariable) Stored a variable')
   
   # todo check if it's in a block
+def MyCheckUsageOfVariable(filename, clean_lines, linenum, error,variable_stack,nesting_state):
+  """Check where the variable been used.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+    variable_stack: info about variables
+  """
+  line = clean_lines.elided[linenum]
+
+  for var_state in variable_stack:
+    variableName = var_state.GetName()
+    if variableName != '':
+      match = Match(rf"(.*){variableName}",line)
+      if match :
+        print("Matched!! ",match.group(0))
+        var_state.Usage(linenum)
+        error(filename, linenum, 'myrules/Variable', 3,
+              '(Variable) Find a usage')
+        print(variableName,var_state.GetUsageLine(),var_state.GetDeclaredLine())
+        print("blocks ",nesting_state.stack)
+        if nesting_state.stack:
+          print("first block starting line ",nesting_state.stack[0].starting_linenum)
+          print("first block ending line ",nesting_state.stack[0].ending_linenum)
 
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
@@ -6441,7 +6485,7 @@ def CheckItemIndentationInNamespace(filename, raw_lines_no_comments, linenum,
 
 
 def ProcessLine(filename, file_extension, clean_lines, line,
-                include_state, function_state, nesting_state, variable_state,error,
+                include_state, function_state, nesting_state, variable_stack,error,
                 extra_check_functions=None):
   """Processes a single line in the file.
 
@@ -6487,7 +6531,8 @@ def ProcessLine(filename, file_extension, clean_lines, line,
       check_fn(filename, clean_lines, line, error)
   
   #custom functions
-  MyCheckGlobalVariable(filename, clean_lines, line, error, variable_state)
+  MyStoreVariable(filename, clean_lines, line, error,variable_stack)
+  MyCheckUsageOfVariable(filename, clean_lines, line, error, variable_stack,nesting_state)
 
 def FlagCxx11Features(filename, clean_lines, linenum, error):
   """Flag those c++11 features that we only allow in certain places.
@@ -6581,7 +6626,8 @@ def ProcessFileData(filename, file_extension, lines, error,
   include_state = _IncludeState()
   function_state = _FunctionState()
   nesting_state = NestingState()
-  variable_state = _MyVariableState()
+  # variable_state = _MyVariableState()
+  variable_stack = []
 
   ResetNolintSuppressions()
 
@@ -6595,7 +6641,7 @@ def ProcessFileData(filename, file_extension, lines, error,
 
   for line in xrange(clean_lines.NumLines()):
     ProcessLine(filename, file_extension, clean_lines, line,
-                include_state, function_state, nesting_state, variable_state,error,
+                include_state, function_state, nesting_state, variable_stack,error,
                 extra_check_functions)
     FlagCxx11Features(filename, clean_lines, line, error)
   nesting_state.CheckCompletedBlocks(filename, error)
