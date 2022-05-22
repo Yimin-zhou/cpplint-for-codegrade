@@ -4868,7 +4868,7 @@ def CheckCustomStyle(filename, clean_lines, linenum, error):
     line = clean_lines.elided[linenum]
     for custom_style in _CUSTOM_STYLE_TEMPLATES:
         if Search(r'%s'%custom_style, line):
-            error(filename, linenum, 'readability/braces', 5,
+            error(filename, linenum, 'codegrade/regex', 5,
                 'this line can not follow the custom style: %s'%custom_style)
 
 def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
@@ -4883,7 +4883,7 @@ def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*?)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
-    error(filename, linenum, 'myrules/name', 3,
+    error(filename, linenum, 'codegrade/variable_name', 3,
           '(Variable/Function) Names of variables and functions should start with a lowercase letter')
 
 def MyCheckClassNaming(filename, clean_lines, linenum, error):
@@ -4898,8 +4898,8 @@ def MyCheckClassNaming(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*?)(class)(\s*)([a-z]|[0-9]))', line):
-    error(filename, linenum, 'myrules/name', 3,
-          '(Class) Name of a Class should starts with a uppercase letter')
+    error(filename, linenum, 'codegrade/class_name', 3,
+          '(Class) Name of a class should starts with a uppercase letter')
 
 def MyCheckConstNaming(filename, clean_lines, linenum, error):
   """Check const names.
@@ -4913,7 +4913,7 @@ def MyCheckConstNaming(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*?)(const)(\s*)((_*)[a-z_*]+(_*)[a-z]+(_*))(\s*)(([A-Z]*[a-z]+[A-z]*(_[A-Z]*[a-z]+[A-z]*)*)|([A-Z]+(_[A-Z]*)*[a-z]+(.*?)))(\s*)(=|;))', line):
-    error(filename, linenum, 'myrules/name', 3,
+    error(filename, linenum, 'codegrade/const_name', 3,
           '(Const) Name of a const should not contain lowercase letters')
 
 def MyCheckInitialization (filename, clean_lines, linenum, error):
@@ -4928,14 +4928,13 @@ def MyCheckInitialization (filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(;$))', line):
-    error(filename, linenum, 'myrules/initialization', 3,
+    error(filename, linenum, 'codegrade/initialization', 3,
           '(Variable) variables should always be initialized')
 
-def MyStoreVariable(filename, clean_lines, linenum, error,variable_stack):
+def MyStoreVariable(clean_lines, linenum,error, variable_stack):
   """Store variables.
 
   Args:
-    filename: The name of the current file.
     clean_lines: A CleansedLines instance containing the file.
     linenum: The number of the line to check.
     error: The function to call with any errors found.
@@ -4994,7 +4993,7 @@ def MyCheckVarAssignment (filename, clean_lines, linenum, error,variable_stack):
     if linenum == clean_lines.NumLines()-2:
       if var_state.assigned == False:
         if var_state.assigned_warned == False:
-          error(filename, var_state.declaration_line, 'myrules/Variable', 3,
+          error(filename, var_state.declaration_line, 'codegrade/variable', 3,
             '(Variable) This variable should be declared as Const')
         var_state.SetAssignedWarn(True)
 
@@ -5010,7 +5009,7 @@ def MyCheckArray(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(\[.*?\]))', line):
-    error(filename, linenum, 'myrules/array', 3,
+    error(filename, linenum, 'codegrade/array', 3,
           '(Array) Arrays must not be used')
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
@@ -6596,7 +6595,7 @@ def ProcessLine(filename, file_extension, clean_lines, line,
       check_fn(filename, clean_lines, line, error)
   
   #custom functions
-  MyStoreVariable(filename, clean_lines, line, error,variable_stack)
+  MyStoreVariable(clean_lines, line, error,variable_stack)
   MyCheckVarAssignment(filename, clean_lines, line, error,variable_stack)
   MyStoreUsageOfVariable(filename, clean_lines, line, error, variable_stack,nesting_state)
 
