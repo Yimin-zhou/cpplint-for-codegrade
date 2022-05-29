@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # Copyright (c) 2009 Google Inc. All rights reserved.
-#
+# Modified by Yimin Zhou
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -250,6 +250,7 @@ Syntax: cpplint.py [--verbose=#] [--output=emacs|eclipse|vs7|junit|sed|gsed]
       linelength=80
       root=subdir
       headers=x,y,...
+      functionlength=
 
     "set noparent" option prevents cpplint from traversing directory tree
     upwards looking for more .cfg files in parent directories. This option
@@ -264,6 +265,8 @@ Syntax: cpplint.py [--verbose=#] [--output=emacs|eclipse|vs7|junit|sed|gsed]
     through the linter.
 
     "linelength" allows to specify the allowed line length for the project.
+
+    "functionlength" allows to specify the allowed function length for the project.
 
     The "root" option is similar in function to the --root flag (see example
     above). Paths are relative to the directory of the CPPLINT.cfg.
@@ -358,6 +361,13 @@ _ERROR_CATEGORIES = [
     'whitespace/semicolon',
     'whitespace/tab',
     'whitespace/todo',
+    'customregex',
+    'name/variable_function_name',
+    'name/class_name',
+    'name/const_name',
+    'variable/initialization',
+    'variable/const',
+    'array',
     ]
 
 # keywords to use with --outputs which generate stdout for machine processing
@@ -873,6 +883,10 @@ _quiet = False
 # The allowed line length of files.
 # This is set by --linelength flag.
 _line_length = 80
+
+# The allowed function length of files.
+# This is set by --functionlength flag.
+_function_length = 40
 
 # This allows to use different include order rule than default
 _include_order = "default"
@@ -1525,7 +1539,7 @@ class _FunctionState(object):
   """Tracks current function name and the number of lines in its body."""
 
   # max function length
-  _NORMAL_TRIGGER = 10  # for --v=0, 500 for --v=1, etc.
+  # _NORMAL_TRIGGER = 10  # for --v=0, 500 for --v=1, etc.
   _TEST_TRIGGER = 400    # about 50% more than _NORMAL_TRIGGER.
 
   def __init__(self):
@@ -1559,10 +1573,11 @@ class _FunctionState(object):
     if not self.in_a_function:
       return
 
+    global _function_length
     if Match(r'T(EST|est)', self.current_function):
-      base_trigger = self._TEST_TRIGGER
+      base_trigger = self._function_length
     else:
-      base_trigger = self._NORMAL_TRIGGER
+      base_trigger = _function_length
     trigger = base_trigger * 2**_VerboseLevel()
 
     if self.lines_in_function > trigger:
@@ -3866,14 +3881,15 @@ def CheckOperatorSpacing(filename, clean_lines, linenum, error):
   # Otherwise not.  Note we only check for non-spaces on *both* sides;
   # sometimes people put non-spaces on one side when aligning ='s among
   # many lines (not that this is behavior that I approve of...)
-  if ((Search(r'[\w.]=', line) or
-       Search(r'=[\w.]', line))
-      and not Search(r'\b(if|while|for) ', line)
+  if ((Search(r'[\w.](=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line) or
+       Search(r'(=|&=|\^=|\|=|\+=|\*=|\/=|\%=)[\w.]', line))
+      # and not Search(r'\b(if|while|for) ', line)
       # Operators taken from [lex.operators] in C++11 standard.
-      and not Search(r'(>=|<=|==|!=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line)
+      # and not Search(r'(>=|<=|==|!=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line)
+      and not Search(r'(>=|<=|==|!=)', line)
       and not Search(r'operator=', line)):
     error(filename, linenum, 'whitespace/operators', 4,
-          'Missing spaces around =')
+          'Missing spaces around operator')
 
   # It's ok not to have spaces around binary operators like + - * /, but if
   # there's too little whitespace, we get concerned.  It's hard to tell,
@@ -4868,8 +4884,8 @@ def CheckCustomStyle(filename, clean_lines, linenum, error):
     line = clean_lines.elided[linenum]
     for custom_style in _CUSTOM_STYLE_TEMPLATES:
         if Search(r'%s'%custom_style, line):
-            error(filename, linenum, 'codegrade/regex', 5,
-                'this line can not follow the custom style: %s'%custom_style)
+            error(filename, linenum, 'customregex', 5,
+                'This line can not follow the custom style: %s'%custom_style)
 
 def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
   """Check variable and function names.
@@ -4882,9 +4898,9 @@ def MyCheckVariableFunctionNaming(filename, clean_lines, linenum, error):
   """
   line = clean_lines.elided[linenum]
 
-  if Search(r'(^(\s*?)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
-    error(filename, linenum, 'codegrade/variable_name', 3,
-          '(Variable/Function) Names of variables and functions should start with a lowercase letter')
+  if Search(r'(^(\s*?)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s)([A-Z]|[0-9])(.*?)(((\()(.*?)(\)))|;))', line):
+    error(filename, linenum, 'name/variable_function_name', 3,
+          'Name of variable or function should start with a lowercase letter')
 
 def MyCheckClassNaming(filename, clean_lines, linenum, error):
   """Check Class names.
@@ -4898,8 +4914,8 @@ def MyCheckClassNaming(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*?)(class)(\s*)([a-z]|[0-9]))', line):
-    error(filename, linenum, 'codegrade/class_name', 3,
-          '(Class) Name of a class should starts with a uppercase letter')
+    error(filename, linenum, 'name/class_name', 3,
+          'Name of a class should starts with a uppercase letter')
 
 def MyCheckConstNaming(filename, clean_lines, linenum, error):
   """Check const names.
@@ -4913,8 +4929,8 @@ def MyCheckConstNaming(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*?)(const)(\s*)((_*)[a-z_*]+(_*)[a-z]+(_*))(\s*)(([A-Z]*[a-z]+[A-z]*(_[A-Z]*[a-z]+[A-z]*)*)|([A-Z]+(_[A-Z]*)*[a-z]+(.*?)))(\s*)(=|;))', line):
-    error(filename, linenum, 'codegrade/const_name', 3,
-          '(Const) Name of a const should not contain lowercase letters')
+    error(filename, linenum, 'name/const_name', 3,
+          'Name of a const should not contain lowercase letters')
 
 def MyCheckInitialization (filename, clean_lines, linenum, error):
   """Check variable Initialization.
@@ -4928,8 +4944,8 @@ def MyCheckInitialization (filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(;$))', line):
-    error(filename, linenum, 'codegrade/initialization', 3,
-          '(Variable) variables should always be initialized')
+    error(filename, linenum, 'variable/initialization', 3,
+          'Variable should always be initialized (unless it should be assigned by user input)')
 
 def MyStoreVariable(clean_lines, linenum,error, variable_stack):
   """Store variables.
@@ -4970,11 +4986,11 @@ def MyStoreUsageOfVariable(filename, clean_lines, linenum, error,variable_stack,
       if match :
         var_state.Usage(linenum)
 
-        assigned_match = Match(rf"(.*){variable_name}(\s*)(=)",line)
         # if it's been assigned again
-        if assigned_match:
+        if Match(rf"(.*){variable_name}(\s*)(=|&=|\^=|\|=|\+=|\*=|\/=|\%=)",line)\
+        or Match(rf"(.*)(\s*)(<<)(\s*){variable_name}",line) :
           if linenum != var_state.declaration_line:
-            print(variable_name,' get assigned again')
+            # print(variable_name,' get assigned again')
             var_state.SetAssigned(True)
 
 def MyCheckVarAssignment (filename, clean_lines, linenum, error,variable_stack):
@@ -4993,8 +5009,8 @@ def MyCheckVarAssignment (filename, clean_lines, linenum, error,variable_stack):
     if linenum == clean_lines.NumLines()-2:
       if var_state.assigned == False:
         if var_state.assigned_warned == False:
-          error(filename, var_state.declaration_line, 'codegrade/variable', 3,
-            '(Variable) This variable should be declared as Const')
+          error(filename, var_state.declaration_line, 'variable/const', 3,
+            'Variable only assigned once should be declared as const')
         var_state.SetAssignedWarn(True)
 
 def MyCheckArray(filename, clean_lines, linenum, error):
@@ -5009,8 +5025,8 @@ def MyCheckArray(filename, clean_lines, linenum, error):
   line = clean_lines.elided[linenum]
 
   if Search(r'(^(\s*)(?!(return|using))((_*)[a-z]+(_*)[a-z]+(_*))(\s*)(\w+)(\s*)(\[.*?\]))', line):
-    error(filename, linenum, 'codegrade/array', 3,
-          '(Array) Arrays must not be used')
+    error(filename, linenum, 'array', 3,
+          'Arrays must not be used')
 
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
                error):
@@ -6793,6 +6809,17 @@ def ProcessConfigOverrides(filename):
             ProcessHppHeadersOption(val)
           elif name == 'includeorder':
             ProcessIncludeOrderOption(val)
+          #custom commands
+          elif name == '--customstyle':
+            input_style = val.replace('!!', ' ')
+            global _CUSTOM_STYLE_TEMPLATES
+            _CUSTOM_STYLE_TEMPLATES.append(input_style)
+          elif name == 'functionlength':
+            global _function_length
+            try:
+              _function_length = int(val)
+            except ValueError:
+              _cpplint_state.PrintError('Function length must be numeric.')
           else:
             _cpplint_state.PrintError(
                 'Invalid configuration option (%s) in file %s\n' %
@@ -6960,7 +6987,8 @@ def ParseArguments(args):
                                                  'headers=',
                                                  'includeorder=',
                                                  'quiet',
-                                                 'customstyle='])
+                                                 'customstyle='
+                                                 'functionlength='])
   except getopt.GetoptError:
     PrintUsage('Invalid arguments.')
 
@@ -7024,6 +7052,14 @@ def ParseArguments(args):
       input_style = val.replace('!!', ' ')
       global _CUSTOM_STYLE_TEMPLATES
       _CUSTOM_STYLE_TEMPLATES.append(input_style)
+
+    #check function length
+    elif opt == '--functionlength':
+      global _function_length
+      try:
+        _function_length = int(val)
+      except ValueError:
+        PrintUsage('Function length must be digits.')
 
   if not filenames:
     PrintUsage('No files were specified.')
