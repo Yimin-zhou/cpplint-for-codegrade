@@ -1283,7 +1283,7 @@ class _CppLintState(object):
     # "junit" - format that Jenkins, Bamboo, etc can parse
     # "sed" - returns a gnu sed command to fix the problem
     # "gsed" - like sed, but names the command gsed, e.g. for macOS homebrew users
-    self.output_format = 'emacs'
+    self.output_format = 'junit'
 
     # For JUnit output, save errors and failures until the end so that they
     # can be written into the XML
@@ -4322,7 +4322,7 @@ def CheckBraces(filename, clean_lines, linenum, error):
   if Search(r'.*{\s*$', line):
     matches = Match(r'(.*?){\s*$', line)
     if Search(r'[a-zA-Z]', matches.group(1)):
-      error(filename, linenum, 'whitespace/braces', 4,
+      error(filename, linenum, 'whitespace/braces_line', 4,
         '{ should always be on its own line')
 
 
@@ -7158,9 +7158,11 @@ def main():
 
   finally:
     sys.stderr = backup_err
-
+  # print("****************return code " + str(int(_cpplint_state.error_count > 0)))
   sys.exit(_cpplint_state.error_count > 0)
+
 
 
 if __name__ == '__main__':
   main()
+
