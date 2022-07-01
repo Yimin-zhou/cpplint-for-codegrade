@@ -368,6 +368,7 @@ _ERROR_CATEGORIES = [
     'variable/initialization',
     'variable/const',
     'array',
+    'struct',
     ]
 
 # keywords to use with --outputs which generate stdout for machine processing
@@ -1422,7 +1423,7 @@ class _CppLintState(object):
           testcase = xml.etree.ElementTree.SubElement(testsuite, 'testcase')
           testcase.attrib['name'] = failed_file
           failure = xml.etree.ElementTree.SubElement(testcase, 'failure')
-          template = '{0}: {1} [{2}] [{3}]'
+          template = '{0}: {1} [{2}]'  # remove confidence level here
           texts = [template.format(f[1], f[2], f[3], f[4]) for f in failures]
           failure.text = '\n'.join(texts)
 
@@ -3883,9 +3884,6 @@ def CheckOperatorSpacing(filename, clean_lines, linenum, error):
   # many lines (not that this is behavior that I approve of...)
   if ((Search(r'[\w.](=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line) or
        Search(r'(=|&=|\^=|\|=|\+=|\*=|\/=|\%=)[\w.]', line))
-      # and not Search(r'\b(if|while|for) ', line)
-      # Operators taken from [lex.operators] in C++11 standard.
-      # and not Search(r'(>=|<=|==|!=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line)
       and not Search(r'(>=|<=|==|!=)', line)
       and not Search(r'operator=', line)):
     error(filename, linenum, 'whitespace/operators', 4,
@@ -5028,6 +5026,21 @@ def MyCheckArray(filename, clean_lines, linenum, error):
     error(filename, linenum, 'array', 3,
           'Arrays must not be used')
 
+def MyCheckStruct(filename, clean_lines, linenum, error):
+  """Struct must not be used.
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    linenum: The number of the line to check.
+    error: The function to call with any errors found.
+  """
+  line = clean_lines.elided[linenum]
+
+  if Search(r'(^(struct)(\s*{))', line):
+    error(filename, linenum, 'struct', 3,
+          'Struct must not be used')
+
 def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
                error):
   """Checks rules from the 'C++ style rules' section of cppguide.html.
@@ -5160,6 +5173,7 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
   MyCheckConstNaming(filename, clean_lines, linenum, error)
   MyCheckInitialization(filename, clean_lines, linenum, error)
   MyCheckArray(filename, clean_lines, linenum, error)
+  MyCheckStruct(filename, clean_lines, linenum, error)
 
 
 _RE_PATTERN_INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]*)[>"].*$')
@@ -5452,7 +5466,6 @@ _RE_PATTERN_CONST_REF_PARAM = (
 # Stream types.
 _RE_PATTERN_REF_STREAM_PARAM = (
     r'(?:.*stream\s*&\s*' + _RE_PATTERN_IDENT + r')')
-
 
 def CheckLanguage(filename, clean_lines, linenum, file_extension,
                   include_state, nesting_state, error):
